@@ -1,0 +1,141 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+env:
+  JAVA_VERSION: '21'
+  NODE_VERSION: '22'
+  AWS_REGION: ap-south-1
+
+jobs:
+  deploy-production:
+    name: Build & Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Run full test suite
+        run: mvn verify
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+
+      - name: Build production artifacts
+        run: mvn package -DskipTests
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push all services to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          services=(
+            "api-gateway"
+            "user-service"
+            "transaction-service"
+            "fraud-detection-service"
+            "decision-engine-service"
+            "notification-service"
+            "ai-advisor-service"
+            "investment-service"
+          )
+          for service in "${services[@]}"; do
+            echo "Building and pushing $service..."
+            docker build \
+              -t $ECR_REGISTRY/wealthsense-$service:$IMAGE_TAG \
+              -t $ECR_REGISTRY/wealthsense-$service:latest \
+              ./$service
+            docker push $ECR_REGISTRY/wealthsense-$service:$IMAGE_TAG
+            docker push $ECR_REGISTRY/wealthsense-$service:latest
+            echo "✅ Pushed wealthsense-$service"
+          done
+
+      - name: Deploy all services to ECS
+        run: |
+          services=(
+            "api-gateway"
+            "user-service"
+            "transaction-service"
+            "fraud-detection-service"
+            "decision-engine-service"
+            "notification-service"
+            "ai-advisor-service"
+            "investment-service"
+          )
+          for service in "${services[@]}"; do
+            echo "Deploying wealthsense-$service to ECS..."
+            aws ecs update-service \
+              --cluster wealthsense-cluster \
+              --service wealthsense-$service \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }}
+          done
+
+      - name: Wait for API Gateway to be stable
+        run: |
+          aws ecs wait services-stable \
+            --cluster wealthsense-cluster \
+            --services wealthsense-api-gateway \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Build frontend
+        run: |
+          cd wealthsense-frontend
+          npm ci
+          npm run build
+        env:
+          VITE_API_URL: ${{ secrets.PRODUCTION_API_URL }}
+          VITE_WS_URL: ${{ secrets.PRODUCTION_WS_URL }}
+          VITE_APP_VERSION: ${{ github.sha }}
+
+      - name: Deploy frontend to S3
+        run: |
+          aws s3 sync wealthsense-frontend/dist/ \
+            s3://${{ secrets.S3_BUCKET }} \
+            --delete \
+            --cache-control "public, max-age=31536000" \
+            --exclude "index.html"
+          # Deploy index.html without cache
+          aws s3 cp wealthsense-frontend/dist/index.html \
+            s3://${{ secrets.S3_BUCKET }}/index.html \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_ID }} \
+            --paths "/*"
+
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            WealthSense production deployment ${{ job.status }}!
+            Commit: ${{ github.sha }}
+            Branch: ${{ github.ref_name }}
+            Actor: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true

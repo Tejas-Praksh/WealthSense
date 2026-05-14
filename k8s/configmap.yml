@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wealthsense-config
+  namespace: wealthsense
+data:
+  POSTGRES_DB: wealthsense
+  POSTGRES_USER: postgres
+  POSTGRES_HOST: postgres
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  APP_ENV: production
+  ZIPKIN_URL: http://zipkin:9411
+  MONGO_URI: mongodb://mongodb:27017/wealthsense
+  MONGO_URI_DECISION: mongodb://mongodb:27017/wealthsense_decision

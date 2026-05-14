@@ -1,0 +1,16 @@
+# Production profile — notification-service (Kafka + RabbitMQ + Mail; no Redis dependency here)
+
+logging:
+  level:
+    com.wealthsense: INFO
+    org.springframework: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

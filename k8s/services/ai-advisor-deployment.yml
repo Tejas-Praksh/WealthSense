@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-advisor
+  namespace: wealthsense
+  labels:
+    app: ai-advisor
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-advisor
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-advisor
+        version: v1
+    spec:
+      containers:
+        - name: ai-advisor
+          image: wealthsense/ai-advisor-service:latest
+          ports:
+            - containerPort: 8086
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: production
+          envFrom:
+            - configMapRef:
+                name: wealthsense-config
+            - secretRef:
+                name: wealthsense-secrets
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 500m
+            limits:
+              memory: 1Gi
+              cpu: "1"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8086
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8086
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /actuator/health/startup
+              port: 8086
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-advisor
+  namespace: wealthsense
+spec:
+  selector:
+    app: ai-advisor
+  ports:
+    - port: 8086
+      targetPort: 8086
+  type: ClusterIP

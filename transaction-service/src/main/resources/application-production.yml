@@ -1,0 +1,25 @@
+# Production profile — transaction-service
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  data:
+    redis:
+      ssl:
+        enabled: true
+
+logging:
+  level:
+    com.wealthsense: INFO
+    org.springframework: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

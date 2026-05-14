@@ -1,0 +1,18 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+  mail:
+    host: localhost
+    port: 3025
+
+jwt:
+  secret: test-secret-key-minimum-256-bits-long
+  expiration: 900000
+
+logging:
+  level:
+    com.wealthsense: DEBUG

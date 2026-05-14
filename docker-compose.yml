@@ -1,0 +1,274 @@
+version: '3.8'
+
+services:
+
+  # ──────────────────────────────────────────────────
+  # PostgreSQL Database
+  # ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: wealthsense-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wealthsense}
+      POSTGRES_USER: ${POSTGRES_USER:-wealthsense}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wealthsense123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wealthsense} -d ${POSTGRES_DB:-wealthsense}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # MongoDB
+  # ──────────────────────────────────────────────────
+  mongodb:
+    image: mongo:6-jammy
+    container_name: wealthsense-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: wealthsense
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Redis
+  # ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: wealthsense-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis123}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Zookeeper (for Kafka)
+  # ──────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: wealthsense-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Kafka
+  # ──────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: wealthsense-kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # RabbitMQ
+  # ──────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: wealthsense-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Elasticsearch
+  # ──────────────────────────────────────────────────
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: wealthsense-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Kibana
+  # ──────────────────────────────────────────────────
+  kibana:
+    image: kibana:8.11.0
+    container_name: wealthsense-kibana
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+    environment:
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+    ports:
+      - "5601:5601"
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Logstash
+  # ──────────────────────────────────────────────────
+  logstash:
+    image: logstash:8.11.0
+    container_name: wealthsense-logstash
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+    volumes:
+      - ./monitoring/elk/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - logstash_data:/usr/share/logstash/data
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    ports:
+      - "5044:5044"
+      - "5000:5000"
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Prometheus
+  # ──────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: wealthsense-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Grafana
+  # ──────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: wealthsense-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/wealthsense-overview.json
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+    networks:
+      - wealthsense-network
+
+  # ──────────────────────────────────────────────────
+  # Zipkin (Distributed Tracing)
+  # ──────────────────────────────────────────────────
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    container_name: wealthsense-zipkin
+    restart: unless-stopped
+    environment:
+      - STORAGE_TYPE=mem
+    ports:
+      - "9411:9411"
+    networks:
+      - wealthsense-network
+
+# ──────────────────────────────────────────────────
+# Volumes
+# ──────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:
+  rabbitmq_data:
+  elasticsearch_data:
+  logstash_data:
+  prometheus_data:
+  grafana_data:
+
+# ──────────────────────────────────────────────────
+# Networks
+# ──────────────────────────────────────────────────
+networks:
+  wealthsense-network:
+    driver: bridge
+  monitoring-network:
+    driver: bridge
+

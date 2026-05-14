@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decision-engine
+  namespace: wealthsense
+  labels:
+    app: decision-engine
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: decision-engine
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: decision-engine
+        version: v1
+    spec:
+      containers:
+        - name: decision-engine
+          image: wealthsense/decision-engine-service:latest
+          ports:
+            - containerPort: 8084
+          envFrom:
+            - configMapRef:
+                name: wealthsense-config
+            - secretRef:
+                name: wealthsense-secrets
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: production
+            - name: MONGO_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: wealthsense-config
+                  key: MONGO_URI_DECISION
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 250m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8084
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8084
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /actuator/health/startup
+              port: 8084
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decision-engine
+  namespace: wealthsense
+spec:
+  selector:
+    app: decision-engine
+  ports:
+    - port: 8084
+      targetPort: 8084
+  type: ClusterIP

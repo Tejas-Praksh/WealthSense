@@ -1,0 +1,60 @@
+groups:
+  - name: wealthsense_alerts
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service down: {{ $labels.job }}"
+          description: "{{ $labels.job }} has been down for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          rate(http_server_requests_seconds_count{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected on {{ $labels.job }}"
+          description: "Error rate exceeds 10% for the last 2 minutes."
+
+      - alert: HighResponseTime
+        expr: |
+          http_server_requests_seconds_sum / http_server_requests_seconds_count > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow response time on {{ $labels.job }}"
+          description: "Average response time > 2 seconds for 5 minutes."
+
+      - alert: KafkaConsumerLag
+        expr: kafka_consumer_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer falling behind"
+          description: "Consumer lag > 1000 messages for 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: |
+          jvm_memory_used_bytes / jvm_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High JVM memory usage on {{ $labels.job }}"
+          description: "JVM heap usage > 85% for 5 minutes."
+
+      - alert: CircuitBreakerOpen
+        expr: |
+          resilience4j_circuitbreaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker open: {{ $labels.name }}"
+          description: "Circuit breaker {{ $labels.name }} has been open for more than 1 minute."

@@ -1,0 +1,14 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+
+management:
+  health:
+    redis:
+      enabled: true
+    kafka:
+      enabled: false

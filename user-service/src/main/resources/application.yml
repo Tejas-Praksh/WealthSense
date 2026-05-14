@@ -1,0 +1,137 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: user-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/wealthsense_users}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:placeholder}
+            client-secret: ${GOOGLE_CLIENT_SECRET:placeholder}
+            scope: email, profile
+jwt:
+  secret: ${JWT_SECRET:aVeryLongSecretKeyForDevelopmentOnlyMustBeAtLeast256BitsLong12345678}
+  expiration: 900000
+  refresh-expiration: 604800000
+
+encryption:
+  key: ${ENCRYPTION_KEY}
+webhook:
+  secret: ${WEBHOOK_SECRET}
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_URL:http://localhost:9411}/api/v2/spans
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+    kafka:
+      enabled: true
+    redis:
+      enabled: true
+    db:
+      enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      fraudService:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedCallsInHalfOpenState: 3
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50
+      notificationService:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+      aiAdvisorService:
+        slidingWindowSize: 5
+        failureRateThreshold: 60
+        waitDurationInOpenState: 30s
+  retry:
+    instances:
+      fraudService:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+      kafkaPublisher:
+        maxAttempts: 3
+        waitDuration: 1000ms
+  bulkhead:
+    instances:
+      fraudService:
+        maxConcurrentCalls: 20
+        maxWaitDuration: 100ms
+      aiAdvisorService:
+        maxConcurrentCalls: 10
+        maxWaitDuration: 500ms
+  timelimiter:
+    instances:
+      fraudService:
+        timeoutDuration: 2s
+      aiAdvisorService:
+        timeoutDuration: 5s
+
+wealthsense:
+  health:
+    fraud-service:
+      enabled: true
+      url: ${FRAUD_SERVICE_URL:http://localhost:8083}
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    tryItOutEnabled: true
+    filter: true
+  show-actuator: false
+  packages-to-scan: com.wealthsense
+
+logging:
+  level:
+    com.wealthsense: DEBUG
+    org.springframework.security: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [traceId=%X{traceId} spanId=%X{spanId} corr=%X{correlationId}] %-5level %logger{36} - %msg%n"

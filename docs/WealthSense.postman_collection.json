@@ -1,0 +1,331 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-wealthsense-api",
+    "name": "WealthSense API",
+    "description": "WealthSense microservices — correlation ID, JWT refresh, and core flows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "access_token", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "user_id", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "(function(){",
+          "  const id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {",
+          "    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);",
+          "    return v.toString(16);",
+          "  });",
+          "  pm.request.headers.upsert({ key: 'X-Correlation-ID', value: id });",
+          "})();"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test('Envelope success', () => pm.expect(j.success).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Str0ngP@ssw0rd!\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/register"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('Has tokens', () => {",
+                  "  pm.expect(j.data).to.have.property('accessToken');",
+                  "  pm.expect(j.data).to.have.property('refreshToken');",
+                  "});",
+                  "if (j.data && j.data.accessToken) {",
+                  "  pm.collectionVariables.set('access_token', j.data.accessToken);",
+                  "  pm.collectionVariables.set('refresh_token', j.data.refreshToken);",
+                  "  if (j.data.userId) pm.collectionVariables.set('user_id', j.data.userId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Str0ngP@ssw0rd!\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Refresh token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.accessToken) {",
+                  "  pm.collectionVariables.set('access_token', j.data.accessToken);",
+                  "  pm.collectionVariables.set('refresh_token', j.data.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Refresh-Token", "value": "{{refresh_token}}" }
+            ],
+            "url": "{{base_url}}/api/v1/auth/refresh"
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Refresh-Token", "value": "{{refresh_token}}" }
+            ],
+            "url": "{{base_url}}/api/v1/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "Create transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test('Envelope', () => pm.expect(j.success).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" },
+              { "key": "X-Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"00000000-0000-0000-0000-000000000001\",\n  \"amount\": 100.50,\n  \"type\": \"DEBIT\",\n  \"category\": \"FOOD\",\n  \"description\": \"Coffee\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/transactions"
+          }
+        },
+        {
+          "name": "List transactions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Body', () => pm.expect(pm.response.json().success).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/api/v1/transactions?page=0&size=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "Chat",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"How much did I spend this month?\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/ai/chat"
+          }
+        },
+        {
+          "name": "Conversations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/api/v1/ai/conversations"
+          }
+        },
+        {
+          "name": "Insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/api/v1/ai/insights"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Investments",
+      "item": [
+        {
+          "name": "SIP calculate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monthlyAmount\": 5000,\n  \"expectedReturnPercent\": 12,\n  \"years\": 10\n}"
+            },
+            "url": "{{base_url}}/api/v1/investments/sip/calculate"
+          }
+        },
+        {
+          "name": "Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/api/v1/investments/recommendations"
+          }
+        },
+        {
+          "name": "Goals list",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/api/v1/investments/goals"
+          }
+        },
+        {
+          "name": "Tax saving",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/api/v1/investments/tax-saving"
+          }
+        }
+      ]
+    }
+  ]
+}
