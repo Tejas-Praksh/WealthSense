@@ -1,0 +1,30 @@
+# Build stage
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
+WORKDIR /app
+
+# Copy the entire project
+COPY . .
+
+# Build the whole project (needed because modules depend on each other)
+RUN mvn clean package -DskipTests
+
+# Run stage for API Gateway
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup -S wealthsense && \
+    adduser -S wealthsense -G wealthsense
+
+# Copy the built jar from the build stage
+COPY --from=build /app/api-gateway/target/*.jar app.jar
+RUN chown wealthsense:wealthsense app.jar
+
+USER wealthsense
+EXPOSE 8080
+
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-Djava.security.egd=file:/dev/./urandom", \
+  "-jar", "app.jar"]
