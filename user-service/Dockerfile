@@ -1,6 +1,5 @@
 FROM maven:3.9.11-eclipse-temurin-21-alpine AS builder
 WORKDIR /app
-
 COPY pom.xml .
 COPY common-library/pom.xml common-library/
 COPY security-lib/pom.xml security-lib/
@@ -12,7 +11,6 @@ COPY decision-engine-service/pom.xml decision-engine-service/
 COPY notification-service/pom.xml notification-service/
 COPY ai-advisor-service/pom.xml ai-advisor-service/
 COPY investment-service/pom.xml investment-service/
-
 RUN mkdir -p api-gateway/src/main/java \
     transaction-service/src/main/java \
     fraud-detection-service/src/main/java \
@@ -20,13 +18,10 @@ RUN mkdir -p api-gateway/src/main/java \
     notification-service/src/main/java \
     ai-advisor-service/src/main/java \
     investment-service/src/main/java
-
 COPY common-library/src common-library/src
 COPY security-lib/src security-lib/src
 COPY user-service/src user-service/src
-
 RUN mvn clean package -pl user-service -am -DskipTests
-
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
