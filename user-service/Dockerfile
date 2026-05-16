@@ -30,4 +30,4 @@ COPY --from=builder /app/user-service/target/*.jar app.jar
 RUN chown appuser:appgroup app.jar
 USER appuser
 EXPOSE 8081
-ENTRYPOINT ["java","-XX:+UseContainerSupport","-XX:MaxRAMPercentage=75.0","-jar","app.jar"]
+ENTRYPOINT ["java","-XX:+UseContainerSupport","-Xmx256m","-Xms256m","-XX:MaxMetaspaceSize=128m","-Xss512k","-jar","app.jar"]
