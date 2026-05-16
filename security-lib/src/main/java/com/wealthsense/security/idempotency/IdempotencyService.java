@@ -3,6 +3,7 @@ package com.wealthsense.security.idempotency;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
@@ -11,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 @Service
+@ConditionalOnBean(RedisTemplate.class)
 public class IdempotencyService {
 
     private static final String IDEMPOTENCY_PREFIX = "idempotent:";
