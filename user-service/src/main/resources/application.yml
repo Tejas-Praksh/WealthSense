@@ -24,6 +24,8 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   data:
+    mongodb:
+      uri: ${MONGO_URI:mongodb://localhost:27017/wealthsense_audit}
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
