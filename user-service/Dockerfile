@@ -21,7 +21,8 @@ RUN mkdir -p api-gateway/src/main/java \
 COPY common-library/src common-library/src
 COPY security-lib/src security-lib/src
 COPY user-service/src user-service/src
-RUN mvn clean package -pl user-service -am -DskipTests
+ENV MAVEN_OPTS="-Xmx256m -XX:MaxMetaspaceSize=128m"
+RUN mvn clean package -pl user-service -am -DskipTests --no-transfer-progress
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
